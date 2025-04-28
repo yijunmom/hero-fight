@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>그리스 평화 수호 게임 - 킹몬스터 확장판</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      background: url('images/background.png') no-repeat center center fixed;
+      background-size: cover;
+      padding: 30px;
+      margin: 0;
+      overflow: hidden;
+    }
+    #game-area {
+      position: relative;
+      width: 800px;
+      height: 600px;
+      margin: 0 auto;
+      background-color: rgba(255,255,255,0.2);
+      border: 2px solid #333;
+      overflow: hidden;
+    }
+    .monster, .sword, .potion, .king-monster {
+      position: absolute;
+    }
+    .monster img, .sword img, #hero img, .potion img, .king-monster img {
+      width: 100%;
+      height: auto;
+    }
+    #hero {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      transition: transform 0.1s linear;
+      width: 100px;
+      height: 100px;
+    }
+    .swing {
+      animation: swingAnimation 0.3s ease;
+    }
+    @keyframes swingAnimation {
+      0% { transform: rotate(0deg); }
+      50% { transform: rotate(30deg); }
+      100% { transform: rotate(0deg); }
+    }
+    #status, #message {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+    .instructions {
+      background-color: rgba(255,255,255,0.7);
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>⚔️ 그리스 평화 수호 게임 - 킹몬스터 확장판 ⚔️</h1>
+
+<div class="instructions">
+  <p>방향키로 이동, 스페이스바로 칼 발사! 물약을 모아 킹 몬스터를 무찌르세요!</p>
+</div>
+
+<div id="game-area">
+  <div id="hero">
+    <img id="heroImage" src="images/hero.png" alt="주인공">
+  </div>
+</div>
+
+<div id="status">
+  <p>처치: 0</p>
+  <p>남은 체력: 3</p>
+  <p>물약: 0</p>
+</div>
+
+<div id="message"></div>
+
+<script>
+const gameArea = document.getElementById('game-area');
+const hero = document.getElementById('hero');
+const heroImage = document.getElementById('heroImage');
+
+let heroX = 400 - 50;
+let heroY = 500;
+let playerHealth = 3;
+let playerKills = 0;
+let potionCount = 0;
+let monsters = [];
+let swords = [];
+let potions = [];
+let kingMonster = null;
+let kingMonsterSpawned = false;
+let gameActive = true;
+let spawnRate = 3000;
+let lastSpawnTime = Date.now();
+
+// 🔥 사운드
+const swordSwingSound = new Audio('sounds/sword_swing.mp3');
+swordSwingSound.volume = 0.5;
+const bgm = new Audio('sounds/bgm_epic_adventure.mp3');
+bgm.volume = 0.3;
+bgm.loop = true;
+bgm.play();
+
+function updateHeroPosition() {
+  hero.style.left = heroX + 'px';
+  hero.style.top = heroY + 'px';
+}
+
+function createMonster() {
+  const monsterDiv = document.createElement('div');
+  monsterDiv.className = 'monster';
+  const monsterImg = document.createElement('img');
+  const monsterType = Math.random() < 0.5 ? 1 : 2;
+  monsterImg.src = `images/monster${monsterType}.png`;
+  monsterImg.alt = '몬스터';
+  monsterDiv.appendChild(monsterImg);
+  gameArea.appendChild(monsterDiv);
+
+  const monsterSpeed = 1 + Math.random() * 2;
+  const monsterY = Math.random() * 450;
+
+  monsterDiv.style.left = '800px';
+  monsterDiv.style.top = monsterY + 'px';
+
+  monsters.push({
+    element: monsterDiv,
+    health: monsterType === 1 ? 1 : 2,
+    speed: monsterSpeed,
+    x: 800,
+    y: monsterY,
+    width: 100,
+    height: 100
+  });
+
+  if (Math.random() < 0.2) { // 20% 확률로 물약 생성
+    createPotion();
+  }
+}
+
+function createPotion() {
+  const potionDiv = document.createElement('div');
+  potionDiv.className = 'potion';
+  const potionImg = document.createElement('img');
+  potionImg.src = 'images/potion.png';
+  potionImg.alt = '물약';
+  potionDiv.appendChild(potionImg);
+  gameArea.appendChild(potionDiv);
+
+  const potionX = 800; // 오른쪽 끝에서 시작
+  const potionY = Math.random() * 500;
+  potionDiv.style.left = potionX + 'px';
+  potionDiv.style.top = potionY + 'px';
+
+  // 🎯 크기 조정 (60px)
+  potionDiv.style.width = '60px';
+  potionDiv.style.height = '60px';
+
+  potions.push({
+    element: potionDiv,
+    x: potionX,
+    y: potionY,
+    speed: 1, // 물약이 왼쪽으로 이동
+    width: 60,
+    height: 60
+  });
+}
+
+function shootSword() {
+  const sword = document.createElement('div');
+  sword.className = 'sword';
+  const swordImg = document.createElement('img');
+  swordImg.src = 'images/sword.png';
+  swordImg.alt = '칼';
+  sword.appendChild(swordImg);
+  const swordX = heroX + 80; // 주인공 앞으로 발사
+  const swordY = heroY + 30; // 주인공 중앙 정도 높이에서 발사
+  sword.style.left = swordX + 'px';
+  sword.style.top = swordY + 'px';
+  gameArea.appendChild(sword);
+  swords.push({
+    element: sword,
+    x: swordX,
+    y: swordY,
+    speed: 15,
+    width: 30,
+    height: 10
+  });
+
+  swordSwingSound.currentTime = 0;
+  swordSwingSound.play();
+
+  heroImage.classList.add('swing');
+  setTimeout(() => heroImage.classList.remove('swing'), 300);
+}
+
+function spawnKingMonster() {
+  kingMonsterSpawned = true;
+  const kingDiv = document.createElement('div');
+  kingDiv.className = 'king-monster';
+  const kingImg = document.createElement('img');
+  kingImg.src = 'images/king_monster.png';
+  kingImg.alt = '킹 몬스터';
+  kingDiv.appendChild(kingImg);
+  gameArea.appendChild(kingDiv);
+
+  kingDiv.style.left = '700px';
+  kingDiv.style.top = '250px';
+
+  kingMonster = {
+    element: kingDiv,
+    health: 5,
+    x: 700,
+    y: 250,
+    width: 150,
+    height: 150
+  };
+}
+
+function checkCollision(obj1, obj2) {
+  return (
+    obj1.x < obj2.x + obj2.width &&
+    obj1.x + obj1.width > obj2.x &&
+    obj1.y < obj2.y + obj2.height &&
+    obj1.y + obj1.height > obj2.y
+  );
+}
+
+function updateGame() {
+  if (!gameActive) return;
+
+  // 몬스터 이동
+  for (let i = monsters.length - 1; i >= 0; i--) {
+    const monster = monsters[i];
+    const dx = heroX - monster.x;
+    const dy = heroY - monster.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > 50) {
+      monster.x += (dx / distance) * monster.speed;
+      monster.y += (dy / distance) * monster.speed;
+      monster.element.style.left = monster.x + 'px';
+      monster.element.style.top = monster.y + 'px';
+    } else {
+      playerHealth -= 1;
+      updateStatus();
+      gameArea.removeChild(monster.element);
+      monsters.splice(i, 1);
+      if (playerHealth <= 0) {
+        gameOver();
+      }
+    }
+  }
+
+  // 물약 이동
+  for (let i = potions.length - 1; i >= 0; i--) {
+    const potion = potions[i];
+    potion.x -= potion.speed;
+    potion.element.style.left = potion.x + 'px';
+
+    // 포션 충돌 체크
+    if (checkCollision({ x: heroX, y: heroY, width: 100, height: 100 }, potion)) {
+      potionCount += 1;
+      gameArea.removeChild(potion.element);
+      potions.splice(i, 1);
+      updateStatus();
+    } else if (potion.x < -60) { // 화면 왼쪽 넘어가면 제거
+      gameArea.removeChild(potion.element);
+      potions.splice(i, 1);
+    }
+  }
+
+  // 칼 이동
+  for (let i = swords.length - 1; i >= 0; i--) {
+    const sword = swords[i];
+    sword.x += sword.speed;
+    sword.element.style.left = sword.x + 'px';
+
+    if (sword.x > 800) {
+      gameArea.removeChild(sword.element);
+      swords.splice(i, 1);
+      continue;
+    }
+
+    let hit = false;
+    for (let j = monsters.length - 1; j >= 0; j--) {
+      const monster = monsters[j];
+      if (checkCollision(sword, monster)) {
+        hit = true;
+        monster.health -= 1;
+        if (monster.health <= 0) {
+          gameArea.removeChild(monster.element);
+          monsters.splice(j, 1);
+          playerKills += 1;
+          updateStatus();
+        }
+        break;
+      }
+    }
+
+    if (!hit && kingMonster && checkCollision(sword, kingMonster)) {
+      hit = true;
+      if (potionCount >= 5) {
+        kingMonster.health -= 1;
+        if (kingMonster.health <= 0) {
+          gameArea.removeChild(kingMonster.element);
+          kingMonster = null;
+          gameClear();
+        }
+      }
+    }
+
+    if (hit) {
+      gameArea.removeChild(sword.element);
+      swords.splice(i, 1);
+    }
+  }
+
+  if (playerKills >= 50 && !kingMonsterSpawned) {
+    spawnKingMonster();
+  }
+
+  const currentTime = Date.now();
+  if (currentTime - lastSpawnTime > spawnRate) {
+    if (!kingMonsterSpawned) createMonster();
+    lastSpawnTime = currentTime;
+    spawnRate = Math.max(1000, spawnRate - 100);
+  }
+}
+
+function updateStatus() {
+  document.getElementById('status').innerHTML = `
+    <p>처치: ${playerKills}</p>
+    <p>남은 체력: ${playerHealth}</p>
+    <p>물약: ${potionCount}</p>
+  `;
+}
+
+function gameOver() {
+  gameActive = false;
+  document.getElementById('message').innerText = '💀 게임 오버! 새로고침하여 다시 시작하세요.';
+  clearInterval(gameInterval);
+  bgm.pause();
+}
+
+function gameClear() {
+  gameActive = false;
+  document.getElementById('message').innerText = '🎉 평화를 수호했습니다! 축하합니다! 🎉';
+  clearInterval(gameInterval);
+  bgm.pause();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (!gameActive) return;
+  const moveSpeed = 10;
+  if (e.key === 'ArrowLeft') heroX -= moveSpeed;
+  if (e.key === 'ArrowRight') heroX += moveSpeed;
+  if (e.key === 'ArrowUp') heroY -= moveSpeed;
+  if (e.key === 'ArrowDown') heroY += moveSpeed;
+  if (e.key === ' ') shootSword();
+  heroX = Math.max(0, Math.min(700, heroX));
+  heroY = Math.max(0, Math.min(500, heroY));
+  updateHeroPosition();
+});
+
+// 게임 시작
+updateHeroPosition();
+createMonster();
+const gameInterval = setInterval(updateGame, 30);
+</script>
+
+</body>
+</html>
